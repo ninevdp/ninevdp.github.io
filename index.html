@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Sudoku game</title>
+  <title>Sudoku — Volledig Interactief</title>
   <style>
     :root {
       --bg: #0f172a;          /* slate-900 */
@@ -23,41 +23,31 @@
     * { box-sizing: border-box; }
     html, body { height: 100%; }
     body {
-      margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+      margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
       color: var(--text); background: radial-gradient(1200px 800px at 20% -10%, #1e293b, #0b1222), var(--bg);
       display: grid; place-items: center; padding: 16px;
     }
-    .app {
-      width: min(1100px, 96vw);
-      display: grid; grid-template-columns: 1fr 340px; gap: 18px;
-    }
+    .app { width: min(1100px, 96vw); display: grid; grid-template-columns: 1fr 340px; gap: 18px; }
     @media (max-width: 980px){ .app { grid-template-columns: 1fr; } }
 
     .card { background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02));
-            border: 1px solid rgba(255,255,255,0.08); border-radius: 18px; box-shadow: 0 20px 40px rgba(0,0,0,0.35);
-            backdrop-filter: blur(6px);
-    }
+            border: 1px solid rgba(255,255,255,0.08); border-radius: 18px; box-shadow: 0 20px 40px rgba(0,0,0,0.35); backdrop-filter: blur(6px); }
     .board-wrap { padding: 14px; }
 
-    .board {
-      width: min(78vmin, 720px); aspect-ratio: 1 / 1; margin: 0 auto;
+    .board { width: min(78vmin, 720px); aspect-ratio: 1 / 1; margin: 0 auto;
       display: grid; grid-template-columns: repeat(9, 1fr); grid-template-rows: repeat(9, 1fr);
-      background: var(--panel); border-radius: 12px; overflow: hidden; position: relative;
-      border: 2px solid var(--grid-strong);
-    }
-    .cell {
-      position: relative; border-right: 1px solid var(--grid); border-bottom: 1px solid var(--grid);
-      display: grid; place-items: center; font-weight: 600; cursor: pointer; user-select: none;
-      transition: background 120ms ease, color 120ms ease, transform 80ms;
-      font-size: clamp(16px, 3.2vmin, 28px);
-    }
+      background: var(--panel); border-radius: 12px; overflow: hidden; position: relative; border: 2px solid var(--grid-strong); }
+
+    .cell { position: relative; border-right: 1px solid var(--grid); border-bottom: 1px solid var(--grid);
+      display: grid; place-items: center; font-weight: 600; cursor: pointer; user-select: none; transition: background 120ms ease, color 120ms ease, transform 80ms; font-size: clamp(16px, 3.2vmin, 28px); }
     .cell:nth-child(9n) { border-right: none; }
     .cell:nth-child(n+73) { border-bottom: none; }
 
-    /* bold 3x3 borders */
+    /* bold 3x3 borders (zero-indexed rows/cols 2 & 5) */
     .cell[data-r="2"], .cell[data-r="5"] { border-bottom: 2px solid var(--grid-strong)!important; }
     .cell[data-c="2"], .cell[data-c="5"] { border-right: 2px solid var(--grid-strong)!important; }
 
+    .val { position: relative; z-index: 1; }
     .given { color: var(--given); }
     .selected { background: rgba(96, 165, 250, 0.18); }
     .peer { background: rgba(148, 163, 184, 0.10); }
@@ -66,7 +56,7 @@
     .shake { animation: shake 220ms linear; }
     @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-3px);} 75% { transform: translateX(3px);} }
 
-    .notes { position: absolute; inset: 2px; display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr); gap: 1px; font-size: clamp(8px, 1.4vmin, 12px); color: var(--muted); pointer-events: none; }
+    .notes { position: absolute; inset: 2px; display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr); gap: 1px; font-size: clamp(8px, 1.4vmin, 12px); color: var(--muted); pointer-events: none; z-index: 0; }
     .note { display: grid; place-items: center; opacity: 0.9; }
 
     .side { padding: 16px; display: grid; gap: 14px; }
@@ -143,7 +133,7 @@
         <button class="btn" id="loadSelected">Laden</button>
         <button class="btn danger" id="resetBtn">Reset</button>
       </div>
-      <div class="footer">Gemaakt voor je — volledig client-side. Sleep dit HTML-bestand naar je hosting en klaar. ✨</div>
+      <div class="footer">Volledig client-side. Sleep dit HTML-bestand naar je hosting en klaar. ✨</div>
     </aside>
   </div>
 
@@ -178,15 +168,11 @@
   // ======= Puzzles (81-char strings, 0 = empty) =======
   const PUZZLES = {
     easy: [
-      // Easy #1
       '530070000600195000098000060800060003400803001700020006060000280000419005000080079',
-      // Easy #2
       '200080300060070084030500209000105408000000000402706000301007040720040060004010003',
     ],
     hard: [
-      // Hard #1
       '000000907000420180000705026100904000050000040000507009920108000034059000507000000',
-      // Hard #2
       '005300000800000020070010500400005300010070006003200004060000050000040000000000000',
     ]
   };
@@ -202,8 +188,14 @@
         cell.dataset.i = i; cell.dataset.r = r; cell.dataset.c = c; cell.dataset.b = boxIndex(r,c);
         cell.setAttribute('role','gridcell'); cell.setAttribute('aria-label', `R${r+1} C${c+1}`);
         cell.addEventListener('click', () => selectCell(i));
+
+        const val = document.createElement('div');
+        val.className = 'val';
+
         const notes = document.createElement('div'); notes.className = 'notes';
         for(let n=1; n<=9; n++){ const s=document.createElement('div'); s.className='note'; s.textContent=n; notes.appendChild(s);}        
+
+        cell.appendChild(val);
         cell.appendChild(notes);
         boardEl.appendChild(cell);
       }
@@ -219,12 +211,16 @@
     for(let i=0; i<81; i++){
       const cell = boardEl.children[i];
       const v = State.grid[i];
+      const valEl = cell.querySelector('.val');
+      const notesEl = cell.querySelector('.notes');
+
       cell.classList.toggle('given', State.fixed[i]);
-      cell.textContent = v ? v : '';
-      cell.querySelector('.notes').style.display = v ? 'none' : 'grid';
-      const notesSet = State.notes[i];
+      valEl.textContent = v ? v : '';
+      notesEl.style.display = v ? 'none' : 'grid';
+
       // update notes visibility
-      const children = cell.querySelector('.notes').children;
+      const notesSet = State.notes[i];
+      const children = notesEl.children;
       for(let n=1; n<=9; n++){
         children[n-1].style.opacity = notesSet.has(n) ? 1 : 0;
       }
@@ -252,7 +248,7 @@
       selEl.textContent = '—';
     }
 
-    // conflicts display (for temporary visualizing peers with same value)
+    // conflicts display
     const conflicts = computeConflicts();
     conflicts.forEach(i => boardEl.children[i].classList.add('conflict'));
 
@@ -292,7 +288,6 @@
 
   // ======= Selection =======
   function selectCell(i){
-    if(State.fixed[i]){ State.selected = i; render(); return; }
     State.selected = i;
     render();
   }
@@ -412,7 +407,6 @@
       if(e.key==='ArrowRight' && c<8) selectCell(r*9+(c+1));
       return;
     }
-    // prevent number typing
     if(/^[1-9]$/.test(e.key)){ e.preventDefault(); }
   });
 
@@ -449,7 +443,7 @@
       if(State.grid[i]===0){
         const cand = candidatesAt(i);
         if(cand.size===1){
-          const [n] = cand; // only entry
+          const [n] = cand;
           doSetNumber(i, n);
           State.selected = i;
           recomputeAllNotes();
@@ -459,7 +453,6 @@
         }
       }
     }
-    // If none, politely shake selected or board
     boardEl.classList.add('shake'); setTimeout(()=>boardEl.classList.remove('shake'),250);
   });
 
@@ -512,4 +505,3 @@
   </script>
 </body>
 </html>
-
