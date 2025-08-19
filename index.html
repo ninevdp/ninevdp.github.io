@@ -13,12 +13,14 @@
       --muted: #94a3b8;       /* slate-400 */
       --accent: #60a5fa;      /* blue-400 */
       --accent-2: #22d3ee;    /* cyan-400 */
-      --bad: #ef4444;         /* red-500 */
-      --ok: #22c55e;          /* green-500 */
-      --warn: #f59e0b;        /* amber-500 */
       --given: #cbd5e1;       /* slate-300 */
       --grid: #334155;        /* slate-600 */
       --grid-strong: #cbd5e1; /* slate-300 */
+      --numpad-bg: #1e293b;   /* default dark numpad */
+      --numpad-hover: #233149;
+      --numpad-text: var(--text);
+      --highlight-bg: rgba(250,204,21,0.36); /* vivid yellow */
+      --highlight-text: #071428; /* very dark for contrast */
     }
     * { box-sizing: border-box; }
     html, body { height: 100%; }
@@ -51,13 +53,15 @@
     .given { color: var(--given); }
     .selected { background: rgba(96, 165, 250, 0.18); }
     .peer { background: rgba(148, 163, 184, 0.10); }
-    .same { color: var(--accent-2); text-shadow: 0 0 8px rgba(34, 211, 238, 0.35); }
+    .same { color: var(--highlight-text); background: var(--highlight-bg); font-weight: 800; }
     .conflict { background: rgba(239, 68, 68, 0.18)!important; }
     .shake { animation: shake 220ms linear; }
     @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-3px);} 75% { transform: translateX(3px);} }
+    .error { background: rgba(239, 68, 68, 0.75)!important; }
 
     .notes { position: absolute; inset: 2px; display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr); gap: 1px; font-size: clamp(8px, 1.4vmin, 12px); color: var(--muted); pointer-events: none; z-index: 0; }
-    .note { display: grid; place-items: center; opacity: 0.9; }
+    .note { display: grid; place-items: center; opacity: 0.9; border-radius: 4px; }
+    .note.same-note { background: var(--highlight-bg); color: var(--highlight-text); font-weight: 800; }
 
     .side { padding: 16px; display: grid; gap: 14px; }
     .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
@@ -72,8 +76,8 @@
     .btn.danger { background: linear-gradient(135deg, rgba(239,68,68,0.18), rgba(239,68,68,0.08)); border: 1px solid rgba(239,68,68,0.35); }
 
     .numpad { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
-    .num { padding: 16px 0; border-radius: 12px; font-size: 18px; font-weight: 800; text-align: center; background: #1e293b; border: 1px solid rgba(255,255,255,0.08); cursor: pointer; }
-    .num:hover { background: #233149; }
+    .num { padding: 16px 0; border-radius: 12px; font-size: 18px; font-weight: 800; text-align: center; background: var(--numpad-bg); border: 1px solid rgba(255,255,255,0.06); color: var(--numpad-text); cursor: pointer; }
+    .num:hover { background: var(--numpad-hover); }
     .num.active { outline: 2px solid var(--accent); }
 
     .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
@@ -98,12 +102,14 @@
         <button class="btn primary" id="newHard">Nieuwe puzzel (Moeilijk)</button>
       </div>
       <ul>
-        <li><a href="index2.html">ANDERE SUDOKU GAME PAGINA</a></li>
+        <li><a href="index1.html">NAAR ANDERE PAGINA</a></li>
       </ul>
       <div class="row">
         <button class="btn" id="undoBtn" title="Ongedaan maken">↶ Undo</button>
         <button class="btn" id="redoBtn" title="Opnieuw">↷ Redo</button>
         <button class="btn warn" id="noteToggle" title="Notitiemodus">📝 Notities: <span id="noteState">UIT</span></button>
+        <button class="btn" id="autoNotesToggle" title="Auto-kandidaten">⚙️ Auto-notes: <span id="autoNoteState">AAN</span></button>
+        <button class="btn" id="themeToggle" title="Thema wisselen">🌓 Thema</button>
         <button class="btn" id="hintBtn" title="Hint (vult een logische kandidaat)">💡 Hint</button>
       </div>
 
@@ -130,8 +136,11 @@
         <select class="btn" id="puzzleSelect" title="Kies puzzel">
           <option value="easy-0">Voorbeeld Easy #1</option>
           <option value="easy-1">Voorbeeld Easy #2</option>
+          <option value="easy-2">Voorbeeld Easy #3</option>
+          <option value="medium-0">Voorbeeld Medium #1</option>
+          <option value="medium-1">Voorbeeld Medium #2</option>
           <option value="hard-0">Voorbeeld Hard #1</option>
-          <option value="hard-1">Voorbeeld Hard #2</option>
+          <option value="expert-0">Voorbeeld Expert #1</option>
         </select>
         <button class="btn" id="loadSelected">Laden</button>
         <button class="btn danger" id="resetBtn">Reset</button>
@@ -150,6 +159,9 @@
   const selEl = byId('sel');
   const noteToggle = byId('noteToggle');
   const noteState = byId('noteState');
+  const autoNotesToggle = byId('autoNotesToggle');
+  const autoNoteState = byId('autoNoteState');
+  const themeToggle = byId('themeToggle');
   const undoBtn = byId('undoBtn');
   const redoBtn = byId('redoBtn');
 
@@ -166,6 +178,8 @@
     elapsed: 0,
     history: [],
     future: [],
+    autoNotes: true,
+    highlightDigit: 0,
   };
 
   // ======= Puzzles (81-char strings, 0 = empty) =======
@@ -173,10 +187,22 @@
     easy: [
       '530070000600195000098000060800060003400803001700020006060000280000419005000080079',
       '200080300060070084030500209000105408000000000402706000301007040720040060004010003',
+      '003020600900305001001806400008102900700000008006708200002609500800203009005010300',
+      '400000805030000000000700000020000060000080400000010000000603070500200000104000000'
+    ],
+    medium: [
+      '000260701680070090190004500820100040004602900050003028009300074040050036703018000',
+      '000000000009050200000107000706030400020000060004090801000401000002060700000000000',
+      '060000200000031040403000000000907000000000000000403000000000506050000000001000030'
     ],
     hard: [
       '000000907000420180000705026100904000050000040000507009920108000034059000507000000',
       '005300000800000020070010500400005300010070006003200004060000050000040000000000000',
+      '300200000000107000706030500070009080900020004010800050009040301000702000000008006'
+    ],
+    expert: [
+      '800000000003600000070090200050007000000045700000100030001000068008500010090000400',
+      '000900000050000003030000070000050004007000800600030000080000020100000030000008000'
     ]
   };
 
@@ -219,19 +245,23 @@
 
       cell.classList.toggle('given', State.fixed[i]);
       valEl.textContent = v ? v : '';
-      notesEl.style.display = v ? 'none' : 'grid';
+      // show notes only when note mode is ON and cell empty
+      notesEl.style.display = (v || !State.noteMode) ? 'none' : 'grid';
 
-      // update notes visibility
+      // auto-notes content (computed separately)
       const notesSet = State.notes[i];
       const children = notesEl.children;
       for(let n=1; n<=9; n++){
-        children[n-1].style.opacity = notesSet.has(n) ? 1 : 0;
+        const noteEl = children[n-1];
+        noteEl.style.opacity = notesSet.has(n) ? 1 : 0;
+        noteEl.classList.remove('same-note');
       }
       // base classes
-      cell.classList.remove('selected', 'peer', 'same', 'conflict');
+      cell.classList.remove('selected', 'peer', 'same', 'conflict', 'error');
     }
 
     // highlights
+    const hd = State.highlightDigit;
     if(State.selected !== -1){
       const [sr, sc] = rowColOf(State.selected);
       for(let i=0; i<81; i++){
@@ -240,15 +270,23 @@
         if(r===sr || c===sc || boxIndex(r,c)===boxIndex(sr,sc)) cell.classList.add('peer');
       }
       boardEl.children[State.selected].classList.add('selected');
+    }
 
-      const val = State.grid[State.selected];
-      if(val){
-        for(let i=0; i<81; i++) if(State.grid[i]===val) boardEl.children[i].classList.add('same');
+    // highlight same numbers based on selected cell OR chosen digit filter
+    let val = 0;
+    if(State.selected !== -1) val = State.grid[State.selected];
+    const target = hd || val;
+    if(target){
+      for(let i=0;i<81;i++){
+        const cell = boardEl.children[i];
+        if(State.grid[i]===target) cell.classList.add('same');
+        // highlight notes inside cells that contain target
+        const notesEl = cell.querySelector('.notes');
+        if(notesEl){
+          const child = notesEl.children[target-1];
+          if(child && State.notes[i].has(target) && notesEl.style.display!=='none') child.classList.add('same-note');
+        }
       }
-
-      selEl.textContent = `R${sr+1}C${sc+1}`;
-    } else {
-      selEl.textContent = '—';
     }
 
     // conflicts display
@@ -258,6 +296,7 @@
     // UI bits
     mistakesEl.textContent = State.mistakes;
     noteState.textContent = State.noteMode ? 'AAN' : 'UIT';
+    autoNoteState.textContent = State.autoNotes ? 'AAN' : 'UIT';
   }
 
   function computeConflicts(){
@@ -292,6 +331,8 @@
   // ======= Selection =======
   function selectCell(i){
     State.selected = i;
+    // if selected has a value and no explicit digit highlight, set highlightDigit to value
+    if(State.grid[i] && !State.highlightDigit) State.highlightDigit = State.grid[i];
     render();
   }
 
@@ -313,6 +354,9 @@
       if(State.grid[i]===0){ State.notes[i] = candidatesAt(i); }
       else { State.notes[i].clear(); }
     }
+  }
+  function recomputeNotesIfNeeded(){
+    if(State.autoNotes){ recomputeAllNotes(); }
   }
 
   // ======= Moves, Undo/Redo =======
@@ -337,6 +381,8 @@
     pushHistory({type:'set', i, from: prev, to: n, notesBefore: new Set(State.notes[i])});
     State.grid[i] = n;
     State.notes[i].clear();
+    // after placing a number, clear highlightDigit so selection's value controls highlighting
+    State.highlightDigit = 0;
     return true;
   }
 
@@ -350,8 +396,8 @@
 
   function flashIllegal(i){
     const cell = boardEl.children[i];
-    cell.classList.add('shake');
-    setTimeout(()=>cell.classList.remove('shake'), 250);
+    cell.classList.add('error');
+    setTimeout(()=>cell.classList.remove('error'), 3000);
   }
 
   function undo(){
@@ -377,23 +423,47 @@
   numpadEl.addEventListener('click', (e) => {
     const key = e.target.closest('.num'); if(!key) return;
     const v = key.dataset.n;
-    if(State.selected===-1) return;
+    if(v !== 'E' && /^[1-9]$/.test(v)){
+      // set digit highlight filter even if no cell selected
+      State.highlightDigit = parseInt(v,10);
+    } else if(v==='E') {
+      State.highlightDigit = 0; // clear highlight on erase key
+    }
+
+    if(State.selected===-1){ render(); return; }
+
     if(v==='E'){ // erase
-      if(doSetNumber(State.selected, 0)) { recomputeAllNotes(); render(); checkWin(); }
+      if(doSetNumber(State.selected, 0)) { recomputeNotesIfNeeded(); render(); checkWin(); }
       return;
     }
     const n = parseInt(v,10);
     if(State.noteMode){
       if(State.fixed[State.selected]) return;
-      if(State.grid[State.selected]!==0) return; // can't note in filled cell
+      if(State.grid[State.selected]!==0) return;
+      if(State.autoNotes) return; // in auto mode, notes are computed automatically — manual editing disabled
+      // manual toggle of note
       if(State.notes[State.selected].has(n)) State.notes[State.selected].delete(n); else State.notes[State.selected].add(n);
       render();
     } else {
-      if(doSetNumber(State.selected, n)) { recomputeAllNotes(); render(); checkWin(); }
+      if(doSetNumber(State.selected, n)) { recomputeNotesIfNeeded(); render(); checkWin(); }
     }
   });
 
-  noteToggle.addEventListener('click', () => { State.noteMode = !State.noteMode; render(); });
+  noteToggle.addEventListener('click', () => { 
+    State.noteMode = !State.noteMode; 
+    if(State.noteMode){
+      // user asked that when note mode is turned ON, notes must not already be present — clear manual notes so user fills them
+      // keep autoNotes underlying data but clear visible manual notes
+      State.notes = Array.from({length:81}, () => new Set());
+    } else {
+      // leaving note mode: if autoNotes enabled, recompute candidates
+      recomputeNotesIfNeeded();
+    }
+    render();
+  });
+
+  autoNotesToggle.addEventListener('click', () => { State.autoNotes = !State.autoNotes; recomputeNotesIfNeeded(); render(); });
+  themeToggle.addEventListener('click', toggleTheme);
   undoBtn.addEventListener('click', undo);
   redoBtn.addEventListener('click', redo);
 
@@ -441,7 +511,7 @@
   const hintBtn = byId('hintBtn');
   hintBtn.addEventListener('click', () => {
     // find a cell with exactly 1 candidate
-    recomputeAllNotes();
+    recomputeNotesIfNeeded();
     for(let i=0;i<81;i++){
       if(State.grid[i]===0){
         const cand = candidatesAt(i);
@@ -449,7 +519,7 @@
           const [n] = cand;
           doSetNumber(i, n);
           State.selected = i;
-          recomputeAllNotes();
+          recomputeNotesIfNeeded();
           render();
           checkWin();
           return;
@@ -461,14 +531,16 @@
 
   // ======= Load/Reset =======
   function loadPuzzle(str){
-    // str: 81 chars
     State.puzzle = Array.from(str).map(ch=>parseInt(ch,10)||0);
     State.grid = State.puzzle.slice();
     State.fixed = State.puzzle.map(v=>v!==0);
+    // ensure manual notes empty at load; user must enable/enter notes
     State.notes = Array.from({length:81}, () => new Set());
     State.selected = -1; State.mistakes = 0; State.history = []; State.future = [];
     State.elapsed = 0; startTimer();
-    recomputeAllNotes();
+    // compute auto-notes in background if enabled but keep them out of visible notes until noteMode is used
+    if(State.autoNotes) recomputeAllNotes();
+    State.highlightDigit = 0;
     render();
   }
   function resetPuzzle(){
@@ -476,7 +548,8 @@
     State.notes = Array.from({length:81}, () => new Set());
     State.selected = -1; State.mistakes = 0; State.history = []; State.future = [];
     State.elapsed = 0; startTimer();
-    recomputeAllNotes();
+    if(State.autoNotes) recomputeAllNotes();
+    State.highlightDigit = 0;
     render();
   }
 
@@ -502,8 +575,59 @@
   const resetBtn = byId('resetBtn');
   resetBtn.addEventListener('click', resetPuzzle);
 
+  // ======= Theme =======
+  function applyTheme(theme){
+    const root = document.documentElement;
+    if(theme==='light'){
+      root.style.setProperty('--bg', '#f3f4f6');
+      root.style.setProperty('--panel', '#ffffff');
+      root.style.setProperty('--panel-2', '#f8fafc');
+      root.style.setProperty('--text', '#0f172a');
+      root.style.setProperty('--muted', '#475569');
+      root.style.setProperty('--accent', '#2563eb');
+      root.style.setProperty('--accent-2', '#0891b2');
+      root.style.setProperty('--given', '#334155');
+      root.style.setProperty('--grid', '#cbd5e1');
+      root.style.setProperty('--grid-strong', '#94a3b8');
+      // numpad light
+      root.style.setProperty('--numpad-bg', '#f1f5f9');
+      root.style.setProperty('--numpad-hover', '#e2e8f0');
+      root.style.setProperty('--numpad-text', '#0f172a');
+      root.style.setProperty('--highlight-bg', 'rgba(250,204,21,0.36)');
+      root.style.setProperty('--highlight-text', '#071428');
+      document.body.style.background = 'linear-gradient(180deg, #e2e8f0, #f8fafc)';
+    } else {
+      // dark (default)
+      root.style.setProperty('--bg', '#0f172a');
+      root.style.setProperty('--panel', '#111827');
+      root.style.setProperty('--panel-2', '#1f2937');
+      root.style.setProperty('--text', '#e5e7eb');
+      root.style.setProperty('--muted', '#94a3b8');
+      root.style.setProperty('--accent', '#60a5fa');
+      root.style.setProperty('--accent-2', '#22d3ee');
+      root.style.setProperty('--given', '#cbd5e1');
+      root.style.setProperty('--grid', '#334155');
+      root.style.setProperty('--grid-strong', '#cbd5e1');
+      root.style.setProperty('--numpad-bg', '#1e293b');
+      root.style.setProperty('--numpad-hover', '#233149');
+      root.style.setProperty('--numpad-text', 'var(--text)');
+      root.style.setProperty('--highlight-bg', 'rgba(250,204,21,0.36)');
+      root.style.setProperty('--highlight-text', '#071428');
+      document.body.style.background = 'radial-gradient(1200px 800px at 20% -10%, #1e293b, #0b1222), var(--bg)';
+    }
+    localStorage.setItem('sudoku-theme', theme);
+    // update numpad colors immediately
+    const nums = document.querySelectorAll('.num');
+    nums.forEach(n => { n.style.background = getComputedStyle(root).getPropertyValue('--numpad-bg'); n.style.color = getComputedStyle(root).getPropertyValue('--numpad-text'); });
+  }
+  function toggleTheme(){
+    const cur = localStorage.getItem('sudoku-theme') || 'dark';
+    applyTheme(cur==='dark' ? 'light' : 'dark');
+  }
+
   // ======= Init =======
   buildBoard();
+  applyTheme(localStorage.getItem('sudoku-theme')||'dark');
   loadPuzzle(PUZZLES.easy[0]);
   </script>
 </body>
